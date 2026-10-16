@@ -9,6 +9,10 @@ import 'auth_repository.dart';
 class SupabaseAuthRepository implements AuthRepository {
   sb.GoTrueClient get _auth => sb.Supabase.instance.client.auth;
 
+  /// Deep link the OAuth browser returns to on Android/iOS. Must match the
+  /// intent-filter in AndroidManifest.xml and a Supabase Redirect URL.
+  static const _mobileRedirect = 'com.aradhya.aradhya://login-callback';
+
   @override
   AppUser? get currentUser {
     final user = _auth.currentUser;
@@ -67,7 +71,7 @@ class SupabaseAuthRepository implements AuthRepository {
     );
     await _auth.signInWithOAuth(
       provider,
-      redirectTo: kIsWeb ? Uri.base.origin : null,
+      redirectTo: kIsWeb ? Uri.base.origin : _mobileRedirect,
     );
     final state = await signedIn.timeout(const Duration(minutes: 5));
     return _toAppUser(state.session!.user);
