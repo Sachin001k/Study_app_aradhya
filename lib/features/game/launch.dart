@@ -27,7 +27,7 @@ void launchPractice(BuildContext context, Concept concept) {
     MaterialPageRoute(
       builder: (_) => BlitzScreen(
         title: concept.name,
-        questions: questionsFor(concept.id)..shuffle(),
+        questions: gameState.practiceQuestions(concept.id),
       ),
     ),
   );
@@ -39,21 +39,14 @@ void launchLesson(BuildContext context, Concept concept) {
   ).push(MaterialPageRoute(builder: (_) => LessonScreen(concept: concept)));
 }
 
-/// Five random questions from concepts the player has already met.
+/// Five fresh questions from concepts the player has already met.
 void launchQuickBlitz(BuildContext context) {
-  final seen = concepts
-      .where((c) => gameState.progressOf(c.id).attempts > 0)
-      .map((c) => c.id)
-      .toSet();
-  final pool =
-      questions
-          .where((q) => seen.isEmpty || seen.contains(q.conceptId))
-          .toList()
-        ..shuffle();
   Navigator.of(context).push(
     MaterialPageRoute(
-      builder: (_) =>
-          BlitzScreen(title: 'Quick blitz', questions: pool.take(5).toList()),
+      builder: (_) => BlitzScreen(
+        title: 'Quick blitz',
+        questions: [for (var i = 0; i < 5; i++) gameState.randomQuestion()],
+      ),
     ),
   );
 }

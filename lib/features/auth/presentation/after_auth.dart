@@ -10,6 +10,9 @@ import 'widgets/auth_scaffold.dart';
 /// After any successful sign-in or sign-up: load progress, then either
 /// onboard a new player or play the entry transition into Home.
 Future<void> continueAfterAuth(BuildContext context, AppUser user) async {
+  // Release the text field's focus first: on web a still-focused input from
+  // the login form would swallow taps on the next screens.
+  FocusManager.instance.primaryFocus?.unfocus();
   final warning = await beginSession(user);
   if (!context.mounted) return;
   if (warning != null) showAuthError(context, warning);

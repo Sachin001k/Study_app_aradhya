@@ -62,7 +62,13 @@ class _ExplainScreenState extends State<ExplainScreen>
       'Explain: ${widget.concept.name}',
       widget.concept.keyPoints.length,
     );
-    gameState.recordExplanation(session, widget.concept.id, _covered.length);
+    gameState.recordExplanation(
+      session,
+      widget.concept.id,
+      _covered.length,
+      seconds: _seconds,
+      total: widget.concept.keyPoints.length,
+    );
     gameState.finishSession(session, task: widget.task);
     Navigator.of(context).pushReplacement(
       MaterialPageRoute(builder: (_) => ResultsScreen(session: session)),

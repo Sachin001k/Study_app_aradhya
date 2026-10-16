@@ -71,7 +71,7 @@ class WelcomeScreen extends StatelessWidget {
                       ),
                       const SizedBox(height: 12),
                       const Text(
-                        'Your brain, mapped. Aradhya finds what you\'re '
+                        'Your brain, mapped. Ekagna finds what you\'re '
                         'forgetting and turns fixing it into a game.',
                         style: TextStyle(
                           fontSize: 16,

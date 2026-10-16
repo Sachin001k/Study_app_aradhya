@@ -54,7 +54,9 @@ class _LessonScreenState extends State<LessonScreen> {
       MaterialPageRoute(
         builder: (_) => BlitzScreen(
           title: widget.concept.name,
-          questions: questionsFor(widget.concept.id)..shuffle(),
+          questions: widget.task != null
+              ? gameState.questionsForTask(widget.task!)
+              : questionGen.batch([widget.concept.id], 4, level: 1),
           task: widget.task,
         ),
       ),
@@ -115,7 +117,7 @@ class _LessonScreenState extends State<LessonScreen> {
                   ),
                   const SizedBox(height: 4),
                   Text(
-                    'Then a ${questionsFor(c.id).length}-question blitz',
+                    'Then a quick blitz with fresh questions',
                     style: const TextStyle(color: AppColors.textSecondary),
                   ),
                   const SizedBox(height: 20),

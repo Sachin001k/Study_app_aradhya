@@ -1,4 +1,4 @@
-# Aradhya — Product & Build Plan
+# Ekagna — Product & Build Plan
 
 A gamified study app: short bursts of learning, instant
 questions, XP, ratings, streaks and leagues powered by a personal knowledge

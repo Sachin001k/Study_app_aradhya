@@ -5,9 +5,21 @@ import '../../core/widgets/game_button.dart';
 import '../game/game_state.dart';
 
 class ResultsScreen extends StatelessWidget {
-  const ResultsScreen({super.key, required this.session});
+  const ResultsScreen({super.key, required this.session, this.replay});
 
   final SessionSummary session;
+
+  /// Builds a fresh game for "Play again" (arcade modes).
+  final Widget Function()? replay;
+
+  (String, String) get _headline => switch (session.outcome) {
+    'win' => ('🏆', 'Victory!'),
+    'loss' => ('😤', 'Defeated'),
+    'draw' => ('🤝', 'Draw!'),
+    _ when session.missionCompleted => ('🎯', 'Mission complete!'),
+    _ when session.isNewBest => ('🚀', 'New personal best!'),
+    _ => ('', ''),
+  };
 
   @override
   Widget build(BuildContext context) {
@@ -32,16 +44,16 @@ class ResultsScreen extends StatelessWidget {
               children: [
                 const SizedBox(height: 12),
                 Text(
-                  session.missionCompleted
-                      ? '🎯'
+                  _headline.$1.isNotEmpty
+                      ? _headline.$1
                       : (accuracy >= 70 ? '🏆' : '💪'),
                   textAlign: TextAlign.center,
                   style: const TextStyle(fontSize: 56),
                 ),
                 const SizedBox(height: 8),
                 Text(
-                  session.missionCompleted
-                      ? 'Mission complete!'
+                  _headline.$2.isNotEmpty
+                      ? _headline.$2
                       : accuracy >= 70
                       ? 'Great round!'
                       : 'Good fight!',
@@ -56,6 +68,10 @@ class ResultsScreen extends StatelessWidget {
                   textAlign: TextAlign.center,
                   style: const TextStyle(color: AppColors.textSecondary),
                 ),
+                if (session.score != null) ...[
+                  const SizedBox(height: 20),
+                  _ScoreBanner(session: session),
+                ],
                 const SizedBox(height: 24),
                 GridView.count(
                   crossAxisCount: 2,
@@ -71,12 +87,20 @@ class ResultsScreen extends StatelessWidget {
                       icon: Icons.bolt_rounded,
                       child: _CountUp(to: session.xp, prefix: '+'),
                     ),
-                    _StatTile(
-                      label: 'Accuracy',
-                      color: AppColors.mastered,
-                      icon: Icons.track_changes_rounded,
-                      child: _CountUp(to: accuracy, suffix: '%'),
-                    ),
+                    if (session.mode == 'memory')
+                      _StatTile(
+                        label: 'Moves',
+                        color: AppColors.mastered,
+                        icon: Icons.touch_app_rounded,
+                        child: _CountUp(to: session.total),
+                      )
+                    else
+                      _StatTile(
+                        label: 'Accuracy',
+                        color: AppColors.mastered,
+                        icon: Icons.track_changes_rounded,
+                        child: _CountUp(to: accuracy, suffix: '%'),
+                      ),
                     _StatTile(
                       label: 'Best combo',
                       color: AppColors.streak,
@@ -203,14 +227,94 @@ class ResultsScreen extends StatelessWidget {
                     ),
                 ],
                 const SizedBox(height: 28),
-                GameButton(
-                  label: 'Continue',
-                  onPressed: () => Navigator.of(context).pop(),
-                ),
+                if (replay != null) ...[
+                  GameButton(
+                    label: 'Play again',
+                    icon: const Icon(
+                      Icons.replay_rounded,
+                      color: AppColors.textOnPrimary,
+                    ),
+                    onPressed: () => Navigator.of(context).pushReplacement(
+                      MaterialPageRoute(builder: (_) => replay!()),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  GameButton.secondary(
+                    label: 'Back to arcade',
+                    onPressed: () => Navigator.of(context).pop(),
+                  ),
+                ] else
+                  GameButton(
+                    label: 'Continue',
+                    onPressed: () => Navigator.of(context).pop(),
+                  ),
               ],
             ),
           ),
         ),
+      ),
+    );
+  }
+}
+
+class _ScoreBanner extends StatelessWidget {
+  const _ScoreBanner({required this.session});
+
+  final SessionSummary session;
+
+  @override
+  Widget build(BuildContext context) {
+    final best = session.previousBest;
+    return Container(
+      padding: const EdgeInsets.symmetric(vertical: 18, horizontal: 16),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(22),
+        gradient: LinearGradient(
+          colors: [
+            AppColors.secondary.withValues(alpha: 0.35),
+            AppColors.primary.withValues(alpha: 0.18),
+          ],
+        ),
+        border: Border.all(
+          color: session.isNewBest ? AppColors.xp : AppColors.border,
+          width: 2,
+        ),
+      ),
+      child: Column(
+        children: [
+          const Text(
+            'SCORE',
+            style: TextStyle(
+              color: AppColors.textSecondary,
+              fontWeight: FontWeight.w800,
+              letterSpacing: 3,
+            ),
+          ),
+          DefaultTextStyle.merge(
+            style: const TextStyle(fontSize: 54, fontWeight: FontWeight.w900),
+            child: _CountUp(to: session.score!),
+          ),
+          if (session.opponent != null)
+            Text(
+              'vs ${session.opponent}',
+              style: const TextStyle(color: AppColors.textSecondary),
+            ),
+          const SizedBox(height: 6),
+          if (session.isNewBest)
+            const Text(
+              '🚀 NEW PERSONAL BEST',
+              style: TextStyle(
+                color: AppColors.xp,
+                fontWeight: FontWeight.w900,
+                letterSpacing: 1.5,
+              ),
+            )
+          else if (best != null)
+            Text(
+              'Best: $best',
+              style: const TextStyle(color: AppColors.textSecondary),
+            ),
+        ],
       ),
     );
   }

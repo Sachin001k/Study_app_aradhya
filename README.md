@@ -1,4 +1,4 @@
-# aradhya
+# Ekagna
 
 A new Flutter project.
 

@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../theme/app_colors.dart';
 
-/// Glowing bolt badge + ARADHYA wordmark.
+/// Glowing bolt badge + EKAGNA wordmark.
 class AppLogo extends StatelessWidget {
   const AppLogo({super.key, this.size = 56});
 
@@ -38,7 +38,7 @@ class AppLogo extends StatelessWidget {
         ),
         SizedBox(width: size * 0.25),
         Text(
-          'ARADHYA',
+          'EKAGNA',
           style: TextStyle(
             fontSize: size * 0.48,
             fontWeight: FontWeight.w900,

@@ -9,6 +9,7 @@ import '../shell/app_shell.dart';
 
 /// Plays the "level start" sequence after login, then lands on Home.
 void enterGame(BuildContext context) {
+  FocusManager.instance.primaryFocus?.unfocus();
   Navigator.of(context).pushAndRemoveUntil(
     PageRouteBuilder<void>(
       transitionDuration: const Duration(milliseconds: 150),

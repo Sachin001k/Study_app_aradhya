@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../core/theme/app_colors.dart';
+import '../arcade/arcade_screen.dart';
 import '../graph/graph_screen.dart';
 import '../home/home_screen.dart';
 import '../league/league_screen.dart';
@@ -19,6 +20,7 @@ class _AppShellState extends State<AppShell> {
 
   static const _screens = [
     HomeScreen(),
+    ArcadeScreen(),
     GraphScreen(),
     LeagueScreen(),
     ProfileScreen(),
@@ -43,6 +45,14 @@ class _AppShellState extends State<AppShell> {
             icon: Icon(Icons.home_outlined),
             selectedIcon: Icon(Icons.home_rounded, color: AppColors.primary),
             label: 'Home',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.sports_esports_outlined),
+            selectedIcon: Icon(
+              Icons.sports_esports_rounded,
+              color: AppColors.primary,
+            ),
+            label: 'Arcade',
           ),
           NavigationDestination(
             icon: Icon(Icons.hub_outlined),

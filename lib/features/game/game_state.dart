@@ -4,6 +4,21 @@ import 'package:flutter/foundation.dart';
 
 import '../auth/data/auth_repository.dart';
 import 'content.dart';
+import 'generator.dart';
+
+/// Shared question generator: fresh numbers every time.
+final questionGen = QuestionGenerator();
+
+/// Random v4 UUID, used to tie answers and rewards to a game session.
+String newId() {
+  final r = math.Random.secure();
+  final b = List<int>.generate(16, (_) => r.nextInt(256));
+  b[6] = (b[6] & 0x0f) | 0x40;
+  b[8] = (b[8] & 0x3f) | 0x80;
+  final h = b.map((x) => x.toRadixString(16).padLeft(2, '0')).join();
+  return '${h.substring(0, 8)}-${h.substring(8, 12)}-${h.substring(12, 16)}-'
+      '${h.substring(16, 20)}-${h.substring(20)}';
+}
 
 enum ConceptStatus { notStudied, weak, misconception, mastered }
 
@@ -102,12 +117,29 @@ class SessionSummary {
     required this.total,
     required this.ratingBefore,
     required this.levelBefore,
-  });
+    this.mode = 'blitz',
+  }) : id = newId(),
+       startedAt = DateTime.now();
 
+  final String id;
   final String title;
-  final int total;
+
+  /// Game mode id, e.g. 'blitz', 'rush', 'duel' (see arcade/game_modes.dart).
+  final String mode;
+  final DateTime startedAt;
+  int total;
   final int ratingBefore;
   final int levelBefore;
+  int? ratingAfter;
+
+  /// Mode-specific score (questions solved, survival depth, …), if any.
+  int? score;
+  int? previousBest;
+  bool isNewBest = false;
+
+  /// 'win' / 'loss' / 'draw' for duels.
+  String? outcome;
+  String? opponent;
   int correct = 0;
   int xp = 0;
   int bestCombo = 0;
@@ -146,7 +178,63 @@ const allBadges = [
   GameBadge('boss', 'Boss Slayer', 'Beat a postponed-topic boss fight', '👹'),
   GameBadge('perfect', 'Flawless', 'Score 100% in a blitz of 3+', '💎'),
   GameBadge('level5', 'Rising Star', 'Reach level 5', '⭐'),
+  GameBadge('speed_demon', 'Speed Demon', 'Solve 15+ in a Speed Rush', '⚡'),
+  GameBadge('survivor', 'Survivor', 'Reach 15 in Survival', '🛡️'),
+  GameBadge(
+    'number_cruncher',
+    'Number Cruncher',
+    'Score 20+ in Number Crunch',
+    '🧮',
+  ),
+  GameBadge(
+    'sharp_memory',
+    'Elephant Memory',
+    'Clear Memory Match in ≤ 10 moves',
+    '🐘',
+  ),
+  GameBadge('duelist', 'Duelist', 'Win a duel', '🤺'),
+  GameBadge(
+    'lie_detector',
+    'Lie Detector',
+    'Score 15+ in True or False',
+    '🕵️',
+  ),
+  GameBadge('arcade_master', 'Arcade Master', 'Play every arcade game', '🕹️'),
 ];
+
+/// Receives everything worth recording (answers, XP, badges, sessions…).
+/// Implemented by the Supabase store; null when offline.
+abstract class GameEventSink {
+  void onAttempt(
+    SessionSummary session,
+    Question question,
+    int chosen,
+    bool correct,
+    Duration taken,
+    int ratingDelta,
+  );
+  void onArithmetic(
+    SessionSummary session,
+    String prompt,
+    int answer,
+    int? given,
+    bool correct,
+    Duration taken,
+  );
+  void onXp(SessionSummary? session, int amount, String source);
+  void onMisconception(SessionSummary session, Diagnosis diagnosis);
+  void onRepaired(SessionSummary session, Concept concept);
+  void onBadge(SessionSummary? session, GameBadge badge);
+  void onSessionFinished(SessionSummary session, MissionTask? task);
+  void onFocus(String kind, {String? conceptId, Map<String, Object?> data});
+  void onExplanation(
+    SessionSummary session,
+    String conceptId,
+    int seconds,
+    int covered,
+    int total,
+  );
+}
 
 /// Rating tiers, Matiks/chess style.
 ({String name, int color}) tierFor(int rating) => switch (rating) {
@@ -177,7 +265,35 @@ class GameState extends ChangeNotifier {
   int answered = 0;
   int correctAnswers = 0;
   int bestCombo = 0;
+  int peakRating = 1000;
+  int longestStreak = 0;
+  int gamesPlayed = 0;
+  int missionsCompleted = 0;
+  int misconceptionsRepaired = 0;
   DateTime? lastActiveDay;
+
+  /// Best score per arcade mode.
+  final Map<String, int> personalBests = {};
+
+  // Today's activity (daily_activity table).
+  DateTime activityDay = _today();
+  int todayXp = 0;
+  int todayQuestions = 0;
+  int todayCorrect = 0;
+  int todaySessions = 0;
+  int todaySeconds = 0;
+
+  static DateTime _today() {
+    final n = DateTime.now();
+    return DateTime(n.year, n.month, n.day);
+  }
+
+  void _rollDay() {
+    final t = _today();
+    if (t == activityDay) return;
+    activityDay = t;
+    todayXp = todayQuestions = todayCorrect = todaySessions = todaySeconds = 0;
+  }
 
   final Map<String, ConceptProgress> progress = {};
   List<MissionTask> mission = [];
@@ -189,9 +305,8 @@ class GameState extends ChangeNotifier {
   int comfortSessions = 0;
   bool comfortNudgeShown = false;
 
-  /// Called after every answer, e.g. to log it to the backend.
-  void Function(Question question, int chosen, bool correct, Duration taken)?
-  onAttempt;
+  /// Where events are recorded (null = nowhere, offline mode).
+  GameEventSink? events;
 
   ConceptProgress progressOf(String conceptId) =>
       progress.putIfAbsent(conceptId, ConceptProgress.new);
@@ -228,6 +343,12 @@ class GameState extends ChangeNotifier {
     rating = user.rating;
     lastActiveDay = null;
     goal = null;
+    peakRating = rating;
+    longestStreak = streak;
+    gamesPlayed = missionsCompleted = misconceptionsRepaired = 0;
+    personalBests.clear();
+    activityDay = _today();
+    todayXp = todayQuestions = todayCorrect = todaySessions = todaySeconds = 0;
     progress.clear();
     badges.clear();
     postponeCounts.clear();
@@ -473,29 +594,62 @@ class GameState extends ChangeNotifier {
     return null;
   }
 
-  /// Questions to play for a mission task.
+  /// Generator difficulty 1–3 from how well the concept is known.
+  int levelFor(String conceptId) {
+    final m = progressOf(conceptId).mastery;
+    return m < 0.4 ? 1 : (m < 0.75 ? 2 : 3);
+  }
+
+  /// Freshly generated questions for a mission task.
   List<Question> questionsForTask(MissionTask task) {
-    final rnd = math.Random();
-    List<Question> pool(String id) => questionsFor(id)..shuffle(rnd);
+    final ids = task.conceptIds;
     switch (task.type) {
       case TaskType.placement:
       case TaskType.review:
-        return [for (final id in task.conceptIds) pool(id).first];
+        return [
+          for (final id in ids) questionGen.forConcept(id, level: levelFor(id)),
+        ];
       case TaskType.exam:
-        final all = [for (final id in task.conceptIds) ...questionsFor(id)]
-          ..sort((a, b) => b.difficulty.compareTo(a.difficulty));
-        return all.take(2).toList();
+        return questionGen.batch(ids, 2, level: 3);
       case TaskType.repair:
-      case TaskType.learn:
       case TaskType.boss:
+        return questionGen.batch(ids, 5, level: levelFor(ids.first));
+      case TaskType.learn:
       case TaskType.explain:
-        return pool(task.conceptIds.first);
+        return questionGen.batch(ids, 4, level: 1);
     }
+  }
+
+  /// [count] fresh questions for free practice on one concept.
+  List<Question> practiceQuestions(String conceptId, [int count = 5]) =>
+      questionGen.batch([conceptId], count, level: levelFor(conceptId));
+
+  /// Concepts the player has met (or the first few, for a brand-new player).
+  List<String> get unlockedConceptIds {
+    final seen = [
+      for (final c in concepts)
+        if (progressOf(c.id).attempts > 0) c.id,
+    ];
+    if (seen.length >= 2) return seen;
+    return concepts.take(3).map((c) => c.id).toList();
+  }
+
+  /// A random fresh question from the player's unlocked concepts.
+  Question randomQuestion({int? level}) {
+    final ids = unlockedConceptIds;
+    final id = ids[math.Random().nextInt(ids.length)];
+    return questionGen.forConcept(id, level: level ?? levelFor(id));
   }
 
   void postpone(MissionTask task) {
     for (final id in task.conceptIds) {
-      postponeCounts[id] = (postponeCounts[id] ?? 0) + 1;
+      final n = postponeCounts[id] = (postponeCounts[id] ?? 0) + 1;
+      events?.onFocus(
+        'postpone',
+        conceptId: id,
+        data: {'count': n, 'task': task.type.name},
+      );
+      if (n == 3) events?.onFocus('boss_unlocked', conceptId: id);
     }
     // Move it to the end of the list.
     mission
@@ -532,12 +686,29 @@ class GameState extends ChangeNotifier {
 
   // ---------------------------------------------------------------- answers
 
-  SessionSummary startSession(String title, int total) => SessionSummary(
+  SessionSummary startSession(
+    String title,
+    int total, {
+    String mode = 'blitz',
+  }) => SessionSummary(
     title: title,
     total: total,
     ratingBefore: rating,
     levelBefore: level,
+    mode: mode,
   );
+
+  /// Adds XP from any source and records where it came from.
+  void awardXp(SessionSummary? session, int amount, String source) {
+    if (amount <= 0) return;
+    _rollDay();
+    xp += amount;
+    weeklyXp += amount;
+    todayXp += amount;
+    session?.xp += amount;
+    events?.onXp(session, amount, source);
+    notifyListeners();
+  }
 
   /// Scores one answer. [chosen] is -1 when the timer ran out.
   AnswerResult answer({
@@ -548,7 +719,11 @@ class GameState extends ChangeNotifier {
     required int combo,
     required SessionSummary session,
     int xpMultiplier = 1,
+
+    /// Duels rate the whole match instead of each answer.
+    bool rated = true,
   }) {
+    _rollDay();
     final p = progressOf(question.conceptId);
     final correct = chosen == question.answer;
     final now = DateTime.now();
@@ -556,8 +731,9 @@ class GameState extends ChangeNotifier {
     // Elo update against the question's own difficulty.
     final expected =
         1 / (1 + math.pow(10, (question.difficulty - rating) / 400));
-    final delta = (32 * ((correct ? 1 : 0) - expected)).round();
+    final delta = rated ? (32 * ((correct ? 1 : 0) - expected)).round() : 0;
     rating = math.max(100, rating + delta);
+    peakRating = math.max(peakRating, rating);
 
     var gained = 0;
     Diagnosis? diagnosis;
@@ -577,6 +753,8 @@ class GameState extends ChangeNotifier {
         p.mastery = math.max(p.mastery, 0.6);
         repaired = conceptById[question.conceptId];
         session.repaired.add(repaired!);
+        misconceptionsRepaired++;
+        events?.onRepaired(session, repaired);
       }
     } else {
       p.mastery *= 0.75;
@@ -595,20 +773,26 @@ class GameState extends ChangeNotifier {
           explanation: trap.explanation,
         );
         session.diagnoses.add(diagnosis);
+        events?.onMisconception(session, diagnosis);
       }
     }
     p.lastReview = now;
-    onAttempt?.call(question, chosen, correct, taken);
+    events?.onAttempt(session, question, chosen, correct, taken, delta);
 
     answered++;
-    if (correct) correctAnswers++;
-    xp += gained;
-    weeklyXp += gained;
+    todayQuestions++;
+    if (correct) {
+      correctAnswers++;
+      todayCorrect++;
+    }
     session
-      ..xp += gained
       ..correct += correct ? 1 : 0
       ..conceptIds.add(question.conceptId);
-    notifyListeners();
+    if (gained > 0) {
+      awardXp(session, gained, session.mode);
+    } else {
+      notifyListeners();
+    }
 
     return AnswerResult(
       correct: correct,
@@ -619,35 +803,87 @@ class GameState extends ChangeNotifier {
     );
   }
 
+  /// A mental-maths answer (Number Crunch): XP and stats, no concept.
+  void recordArithmetic({
+    required SessionSummary session,
+    required String prompt,
+    required int answer,
+    required int? given,
+    required Duration taken,
+    required int combo,
+  }) {
+    _rollDay();
+    final correct = given == answer;
+    answered++;
+    todayQuestions++;
+    if (correct) {
+      correctAnswers++;
+      todayCorrect++;
+      session.correct++;
+    }
+    events?.onArithmetic(session, prompt, answer, given, correct, taken);
+    if (correct) {
+      awardXp(session, 3 + math.min(combo, 5), 'crunch');
+    } else {
+      notifyListeners();
+    }
+  }
+
+  /// Elo update for a whole match against an opponent rated [opponent].
+  /// [score] is 1 for a win, 0.5 for a draw, 0 for a loss.
+  int applyMatchResult(int opponent, double score) {
+    final expected = 1 / (1 + math.pow(10, (opponent - rating) / 400));
+    final delta = (40 * (score - expected)).round();
+    rating = math.max(100, rating + delta);
+    peakRating = math.max(peakRating, rating);
+    notifyListeners();
+    return delta;
+  }
+
   /// Explaining a concept aloud refreshes memory; XP per key point covered.
   void recordExplanation(
     SessionSummary session,
     String conceptId,
-    int covered,
-  ) {
-    final gained = covered * 10;
+    int covered, {
+    int seconds = 0,
+    int total = 0,
+  }) {
     final p = progressOf(conceptId)
       ..lastReview = DateTime.now()
       ..attempts += 1;
     p.stabilityDays = math.min(60, p.stabilityDays * (1 + 0.2 * covered));
-    xp += gained;
-    weeklyXp += gained;
     session
-      ..xp += gained
       ..correct = covered
       ..conceptIds.add(conceptId);
-    notifyListeners();
+    events?.onExplanation(session, conceptId, seconds, covered, total);
+    awardXp(session, covered * 10, 'explain');
   }
 
   /// Called once a blitz (or explain task) ends.
   void finishSession(SessionSummary session, {MissionTask? task}) {
+    _rollDay();
     final now = DateTime.now();
     final today = DateTime(now.year, now.month, now.day);
     if (lastActiveDay != today) {
       streak++;
       lastActiveDay = today;
     }
+    longestStreak = math.max(longestStreak, streak);
     bestCombo = math.max(bestCombo, session.bestCombo);
+    gamesPlayed++;
+    todaySessions++;
+    todaySeconds += now.difference(session.startedAt).inSeconds;
+
+    // Personal bests for scored arcade modes.
+    final score = session.score;
+    if (score != null) {
+      final prev = personalBests[session.mode];
+      session.previousBest = prev;
+      if (prev == null || score > prev) {
+        personalBests[session.mode] = score;
+        session.isNewBest = prev != null || score > 0;
+      }
+    }
 
     // Comfort-zone detector.
     final allMastered =
@@ -657,11 +893,13 @@ class GameState extends ChangeNotifier {
         );
     final wasNudged = inComfortZone;
     comfortSessions = allMastered ? comfortSessions + 1 : 0;
+    if (comfortSessions == 2) events?.onFocus('comfort_nudge');
 
     if (task != null) {
       task.done = true;
       if (task.type == TaskType.boss) {
         postponeCounts.remove(task.conceptIds.first);
+        events?.onFocus('boss_defeated', conceptId: task.conceptIds.first);
         _award('boss', session);
       }
     }
@@ -669,9 +907,8 @@ class GameState extends ChangeNotifier {
     if (!missionBonusClaimed && missionDone) {
       missionBonusClaimed = true;
       session.missionCompleted = true;
-      xp += 50;
-      weeklyXp += 50;
-      session.xp += 50;
+      missionsCompleted++;
+      awardXp(session, 50, 'mission_bonus');
       _award('mission', session);
     }
 
@@ -683,7 +920,38 @@ class GameState extends ChangeNotifier {
       _award('perfect', session);
     }
     if (level >= 5) _award('level5', session);
+    _awardArcadeBadges(session);
+
+    session.ratingAfter = rating;
+    events?.onSessionFinished(session, task);
     notifyListeners();
+  }
+
+  void _awardArcadeBadges(SessionSummary s) {
+    final score = s.score ?? 0;
+    switch (s.mode) {
+      case 'rush' when score >= 15:
+        _award('speed_demon', s);
+      case 'survival' when score >= 15:
+        _award('survivor', s);
+      case 'crunch' when score >= 20:
+        _award('number_cruncher', s);
+      case 'truefalse' when score >= 15:
+        _award('lie_detector', s);
+      case 'memory' when s.total <= 10:
+        _award('sharp_memory', s);
+      case 'duel' when s.outcome == 'win':
+        _award('duelist', s);
+    }
+    const arcade = [
+      'rush',
+      'truefalse',
+      'crunch',
+      'survival',
+      'memory',
+      'duel',
+    ];
+    if (arcade.every(personalBests.containsKey)) _award('arcade_master', s);
   }
 
   /// Tomorrow's plan, rebuilt from today's performance.
@@ -697,7 +965,9 @@ class GameState extends ChangeNotifier {
 
   void _award(String id, SessionSummary session) {
     if (badges.add(id)) {
-      session.newBadges.add(allBadges.firstWhere((b) => b.id == id));
+      final badge = allBadges.firstWhere((b) => b.id == id);
+      session.newBadges.add(badge);
+      events?.onBadge(session, badge);
     }
   }
 }

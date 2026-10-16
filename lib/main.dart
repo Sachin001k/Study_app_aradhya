@@ -24,11 +24,11 @@ Future<void> main() async {
   }
   final user = authRepository.currentUser;
   if (user != null) await beginSession(user);
-  runApp(AradhyaApp(user: user));
+  runApp(EkagnaApp(user: user));
 }
 
-class AradhyaApp extends StatelessWidget {
-  const AradhyaApp({super.key, this.user});
+class EkagnaApp extends StatelessWidget {
+  const EkagnaApp({super.key, this.user});
 
   /// Restored from a previous session, if any.
   final AppUser? user;
@@ -36,7 +36,7 @@ class AradhyaApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Aradhya',
+      title: 'Ekagna',
       debugShowCheckedModeBanner: false,
       theme: AppTheme.dark(),
       home: switch (user) {

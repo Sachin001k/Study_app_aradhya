@@ -1,3 +1,4 @@
+import 'content.dart';
 import 'game_state.dart';
 
 /// Converts [GameState] to and from database rows (see supabase/schema.sql).
@@ -14,33 +15,52 @@ class ProgressCodec {
   static DateTime weekStart(DateTime d) =>
       dateOnly(d).subtract(Duration(days: d.weekday - 1));
 
+  static String _ts(DateTime d) => d.toUtc().toIso8601String();
+
+  // ---------------------------------------------------------------- profile
+
   static Map<String, dynamic> profileRow(GameState g, DateTime now) => {
     'id': g.userId,
     'display_name': g.displayName,
     'goal': g.goal,
-    'subjects': g.subjects.toList(),
     'daily_minutes': g.dailyMinutes,
     'onboarded': g.onboarded,
-    'xp': g.xp,
-    'weekly_xp': g.weeklyXp,
-    'week_start': day(weekStart(now)),
-    'streak': g.streak,
-    'last_active_day': g.lastActiveDay == null ? null : day(g.lastActiveDay!),
-    'rating': g.rating,
-    'answered': g.answered,
-    'correct_answers': g.correctAnswers,
-    'best_combo': g.bestCombo,
-    'badges': g.badges.toList(),
-    'postpone_counts': g.postponeCounts,
-    'comfort_sessions': g.comfortSessions,
-    'updated_at': now.toUtc().toIso8601String(),
+    'updated_at': _ts(now),
   };
 
-  static void applyProfile(
-    GameState g,
-    Map<String, dynamic> row,
-    DateTime now,
-  ) {
+  static void applyProfile(GameState g, Map<String, dynamic> row) {
+    g
+      ..displayName = row['display_name'] as String? ?? g.displayName
+      ..goal = row['goal'] as String?
+      ..dailyMinutes = row['daily_minutes'] as int? ?? 38
+      ..onboarded = row['onboarded'] as bool? ?? false;
+  }
+
+  // ------------------------------------------------------------------ stats
+
+  static Map<String, dynamic> statsRow(GameState g, DateTime now) => {
+    'user_id': g.userId,
+    'xp': g.xp,
+    'level': g.level,
+    'weekly_xp': g.weeklyXp,
+    'week_start': day(weekStart(now)),
+    'rating': g.rating,
+    'peak_rating': g.peakRating,
+    'streak': g.streak,
+    'longest_streak': g.longestStreak,
+    'last_active_day': g.lastActiveDay == null ? null : day(g.lastActiveDay!),
+    'questions_answered': g.answered,
+    'questions_correct': g.correctAnswers,
+    'best_combo': g.bestCombo,
+    'games_played': g.gamesPlayed,
+    'missions_completed': g.missionsCompleted,
+    'misconceptions_repaired': g.misconceptionsRepaired,
+    'comfort_sessions': g.comfortSessions,
+    'postpone_counts': g.postponeCounts,
+    'updated_at': _ts(now),
+  };
+
+  static void applyStats(GameState g, Map<String, dynamic> row, DateTime now) {
     final today = dateOnly(now);
     final lastActive = row['last_active_day'] == null
         ? null
@@ -50,26 +70,23 @@ class ProgressCodec {
         lastActive != null &&
         today.difference(dateOnly(lastActive)).inDays <= 1;
     final sameWeek = row['week_start'] == day(weekStart(now));
+    int i(String k, [int fallback = 0]) => row[k] as int? ?? fallback;
 
     g
-      ..displayName = row['display_name'] as String? ?? g.displayName
-      ..goal = row['goal'] as String?
-      ..subjects = {...(row['subjects'] as List? ?? const []).cast<String>()}
-      ..dailyMinutes = row['daily_minutes'] as int? ?? 38
-      ..onboarded = row['onboarded'] as bool? ?? false
-      ..xp = row['xp'] as int? ?? 0
-      ..weeklyXp = sameWeek ? row['weekly_xp'] as int? ?? 0 : 0
-      ..streak = streakAlive ? row['streak'] as int? ?? 0 : 0
+      ..xp = i('xp')
+      ..weeklyXp = sameWeek ? i('weekly_xp') : 0
+      ..rating = i('rating', 1000)
+      ..peakRating = i('peak_rating', 1000)
+      ..streak = streakAlive ? i('streak') : 0
+      ..longestStreak = i('longest_streak')
       ..lastActiveDay = lastActive
-      ..rating = row['rating'] as int? ?? 1000
-      ..answered = row['answered'] as int? ?? 0
-      ..correctAnswers = row['correct_answers'] as int? ?? 0
-      ..bestCombo = row['best_combo'] as int? ?? 0
-      ..comfortSessions = row['comfort_sessions'] as int? ?? 0;
-    if (g.subjects.isEmpty) g.subjects = {'Maths'};
-    g.badges
-      ..clear()
-      ..addAll((row['badges'] as List? ?? const []).cast<String>());
+      ..answered = i('questions_answered')
+      ..correctAnswers = i('questions_correct')
+      ..bestCombo = i('best_combo')
+      ..gamesPlayed = i('games_played')
+      ..missionsCompleted = i('missions_completed')
+      ..misconceptionsRepaired = i('misconceptions_repaired')
+      ..comfortSessions = i('comfort_sessions');
     g.postponeCounts
       ..clear()
       ..addAll(
@@ -78,6 +95,31 @@ class ProgressCodec {
         ),
       );
   }
+
+  // ---------------------------------------------------------- daily activity
+
+  static Map<String, dynamic> dailyRow(GameState g, DateTime now) => {
+    'user_id': g.userId,
+    'day': day(g.activityDay),
+    'xp': g.todayXp,
+    'questions': g.todayQuestions,
+    'correct': g.todayCorrect,
+    'sessions': g.todaySessions,
+    'seconds_played': g.todaySeconds,
+    'updated_at': _ts(now),
+  };
+
+  static void applyDaily(GameState g, Map<String, dynamic> row) {
+    g
+      ..activityDay = DateTime.parse(row['day'] as String)
+      ..todayXp = row['xp'] as int? ?? 0
+      ..todayQuestions = row['questions'] as int? ?? 0
+      ..todayCorrect = row['correct'] as int? ?? 0
+      ..todaySessions = row['sessions'] as int? ?? 0
+      ..todaySeconds = row['seconds_played'] as int? ?? 0;
+  }
+
+  // -------------------------------------------------------- concept progress
 
   static Map<String, dynamic> progressRow(
     String userId,
@@ -89,11 +131,11 @@ class ProgressCodec {
     'concept_id': conceptId,
     'mastery': p.mastery,
     'stability_days': p.stabilityDays,
-    'last_review': p.lastReview?.toUtc().toIso8601String(),
+    'last_review': p.lastReview == null ? null : _ts(p.lastReview!),
     'misconception': p.misconception,
     'attempts': p.attempts,
     'repair_streak': p.repairStreak,
-    'updated_at': now.toUtc().toIso8601String(),
+    'updated_at': _ts(now),
   };
 
   static ConceptProgress progressFromRow(Map<String, dynamic> r) =>
@@ -107,26 +149,110 @@ class ProgressCodec {
         attempts: r['attempts'] as int,
       )..repairStreak = r['repair_streak'] as int? ?? 0;
 
-  static List<Map<String, dynamic>> tasksToJson(List<MissionTask> tasks) => [
-    for (final t in tasks)
+  // ---------------------------------------------------------------- missions
+
+  static Map<String, dynamic> missionRow(
+    GameState g,
+    DateTime missionDay,
+    DateTime now,
+  ) => {
+    'user_id': g.userId,
+    'day': day(missionDay),
+    'total_minutes': g.missionMinutes,
+    'bonus_claimed': g.missionBonusClaimed,
+    'completed_at': g.missionDone ? _ts(now) : null,
+    'updated_at': _ts(now),
+  };
+
+  static List<Map<String, dynamic>> taskRows(
+    String userId,
+    DateTime missionDay,
+    List<MissionTask> tasks,
+    DateTime now,
+  ) => [
+    for (var i = 0; i < tasks.length; i++)
       {
-        'type': t.type.name,
-        'title': t.title,
-        'subtitle': t.subtitle,
-        'concept_ids': t.conceptIds,
-        'minutes': t.minutes,
-        'done': t.done,
+        'user_id': userId,
+        'day': day(missionDay),
+        'position': i,
+        'type': tasks[i].type.name,
+        'title': tasks[i].title,
+        'subtitle': tasks[i].subtitle,
+        'concept_ids': tasks[i].conceptIds,
+        'minutes': tasks[i].minutes,
+        'done': tasks[i].done,
+        'updated_at': _ts(now),
       },
   ];
 
-  static List<MissionTask> tasksFromJson(List<dynamic> json) => [
-    for (final j in json.cast<Map<String, dynamic>>())
-      MissionTask(
-        type: TaskType.values.byName(j['type'] as String),
-        title: j['title'] as String,
-        subtitle: j['subtitle'] as String,
-        conceptIds: (j['concept_ids'] as List).cast<String>(),
-        minutes: j['minutes'] as int,
-      )..done = j['done'] == true,
-  ];
+  static List<MissionTask> tasksFromRows(List<Map<String, dynamic>> rows) {
+    final sorted = [...rows]
+      ..sort((a, b) => (a['position'] as int).compareTo(b['position'] as int));
+    return [
+      for (final r in sorted)
+        if (TaskType.values.any((t) => t.name == r['type']))
+          MissionTask(
+            type: TaskType.values.byName(r['type'] as String),
+            title: r['title'] as String,
+            subtitle: r['subtitle'] as String? ?? '',
+            conceptIds: (r['concept_ids'] as List).cast<String>(),
+            minutes: r['minutes'] as int,
+          )..done = r['done'] == true,
+    ];
+  }
+
+  // ------------------------------------------------------------------ events
+
+  static Map<String, dynamic> attemptRow(
+    String userId,
+    SessionSummary s,
+    Question q,
+    int chosen,
+    bool correct,
+    Duration taken,
+    int ratingDelta,
+  ) => {
+    'user_id': userId,
+    'session_id': s.id,
+    'mode': s.mode,
+    'question_id': q.id,
+    'concept_id': q.conceptId,
+    'prompt': q.prompt,
+    'options': q.options,
+    'answer_index': q.answer,
+    'chosen': chosen,
+    'correct_answer': q.options[q.answer],
+    'given_answer': chosen >= 0 && chosen < q.options.length
+        ? q.options[chosen]
+        : null,
+    'correct': correct,
+    'time_ms': taken.inMilliseconds,
+    'difficulty': q.difficulty,
+    'rating_delta': ratingDelta,
+  };
+
+  static Map<String, dynamic> sessionRow(
+    String userId,
+    SessionSummary s,
+    MissionTask? task,
+    DateTime now,
+  ) => {
+    'id': s.id,
+    'user_id': userId,
+    'mode': s.mode,
+    'title': s.title,
+    'score': s.score,
+    'correct': s.correct,
+    'total': s.total,
+    'best_combo': s.bestCombo,
+    'xp_earned': s.xp,
+    'rating_before': s.ratingBefore,
+    'rating_after': s.ratingAfter ?? s.ratingBefore,
+    'outcome': s.outcome,
+    'opponent': s.opponent,
+    'mission_task': task?.type.name,
+    'started_at': _ts(s.startedAt),
+    'ended_at': _ts(now),
+    'duration_ms': now.difference(s.startedAt).inMilliseconds,
+  };
 }
