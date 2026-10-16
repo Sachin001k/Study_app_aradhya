@@ -2,15 +2,26 @@ import 'package:flutter/material.dart';
 
 import '../../core/theme/app_colors.dart';
 import '../game/game_state.dart';
+import '../game/session.dart';
 
-/// Weekly XP league (mock opponents until the backend exists).
-class LeagueScreen extends StatelessWidget {
+typedef _Player = ({String name, int xp, bool me});
+
+/// Weekly XP league: real players from Supabase, or sample rivals offline.
+class LeagueScreen extends StatefulWidget {
   const LeagueScreen({super.key});
 
+  @override
+  State<LeagueScreen> createState() => _LeagueScreenState();
+}
+
+class _LeagueScreenState extends State<LeagueScreen> {
   static const _promote = 3;
   static const _demote = 3;
 
-  static const _rivals = <(String, int)>[
+  /// Zones only make sense once the league has enough players.
+  static const _minForZones = 8;
+
+  static const _sampleRivals = <(String, int)>[
     ('Ishaan', 640),
     ('Meera', 585),
     ('Kabir', 512),
@@ -27,71 +38,143 @@ class LeagueScreen extends StatelessWidget {
     ('Zoya', 20),
   ];
 
+  List<({String id, String name, int xp})>? _remote;
+  String? _error;
+  bool _loading = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _refresh();
+  }
+
+  Future<void> _refresh() async {
+    final store = progressStore;
+    if (store == null) return;
+    setState(() => _loading = true);
+    try {
+      await store.flush();
+      final rows = await store.weeklyLeague();
+      if (mounted) {
+        setState(() {
+          _remote = rows;
+          _error = null;
+        });
+      }
+    } catch (e) {
+      debugPrint('League load failed: $e');
+      if (mounted) setState(() => _error = 'Couldn’t load the league.');
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  List<_Player> _players() {
+    final me = (name: gameState.displayName, xp: gameState.weeklyXp, me: true);
+    final List<_Player> others;
+    if (progressStore == null) {
+      others = [
+        for (final r in _sampleRivals) (name: r.$1, xp: r.$2, me: false),
+      ];
+    } else {
+      others = [
+        for (final r in _remote ?? const <({String id, String name, int xp})>[])
+          if (r.id != gameState.userId) (name: r.name, xp: r.xp, me: false),
+      ];
+    }
+    return [...others, me]..sort((a, b) => b.xp.compareTo(a.xp));
+  }
+
   @override
   Widget build(BuildContext context) {
     return ListenableBuilder(
       listenable: gameState,
       builder: (context, _) {
-        final players = [
-          ..._rivals.map((r) => (name: r.$1, xp: r.$2, me: false)),
-          (name: gameState.displayName, xp: gameState.weeklyXp, me: true),
-        ]..sort((a, b) => b.xp.compareTo(a.xp));
+        final players = _players();
+        final zones = players.length >= _minForZones;
         final tier = tierFor(gameState.rating);
 
         return SafeArea(
-          child: ListView(
-            padding: const EdgeInsets.all(20),
-            children: [
-              Row(
-                children: [
-                  Icon(
-                    Icons.shield_rounded,
-                    color: Color(tier.color),
-                    size: 40,
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          '${tier.name} League',
-                          style: const TextStyle(
-                            fontSize: 26,
-                            fontWeight: FontWeight.w800,
-                          ),
-                        ),
-                        const Text(
-                          'Top 3 promote · ends Sunday',
-                          style: TextStyle(color: AppColors.textSecondary),
-                        ),
-                      ],
+          child: RefreshIndicator(
+            onRefresh: _refresh,
+            child: ListView(
+              physics: const AlwaysScrollableScrollPhysics(),
+              padding: const EdgeInsets.all(20),
+              children: [
+                Row(
+                  children: [
+                    Icon(
+                      Icons.shield_rounded,
+                      color: Color(tier.color),
+                      size: 40,
                     ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            '${tier.name} League',
+                            style: const TextStyle(
+                              fontSize: 26,
+                              fontWeight: FontWeight.w800,
+                            ),
+                          ),
+                          Text(
+                            progressStore == null
+                                ? 'Sample rivals (offline) · ends Sunday'
+                                : zones
+                                ? 'Top $_promote promote · ends Sunday'
+                                : '${players.length} player${players.length == 1 ? '' : 's'} this week · ends Sunday',
+                            style: const TextStyle(
+                              color: AppColors.textSecondary,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    if (progressStore != null)
+                      _loading
+                          ? const SizedBox.square(
+                              dimension: 20,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            )
+                          : IconButton(
+                              tooltip: 'Refresh',
+                              icon: const Icon(Icons.refresh_rounded),
+                              onPressed: _refresh,
+                            ),
+                  ],
+                ),
+                if (_error != null) ...[
+                  const SizedBox(height: 12),
+                  Text(_error!, style: const TextStyle(color: AppColors.error)),
+                ],
+                const SizedBox(height: 20),
+                for (var i = 0; i < players.length; i++) ...[
+                  if (zones && i == _promote)
+                    const _ZoneDivider('PROMOTION ZONE ↑', AppColors.mastered),
+                  if (zones && i == players.length - _demote)
+                    const _ZoneDivider(
+                      'DEMOTION ZONE ↓',
+                      AppColors.misconception,
+                    ),
+                  _Row(
+                    rank: i + 1,
+                    name: players[i].name,
+                    xp: players[i].xp,
+                    me: players[i].me,
+                    zoneColor: !zones
+                        ? null
+                        : i < _promote
+                        ? AppColors.mastered
+                        : i >= players.length - _demote
+                        ? AppColors.misconception
+                        : null,
                   ),
                 ],
-              ),
-              const SizedBox(height: 20),
-              for (var i = 0; i < players.length; i++) ...[
-                if (i == _promote)
-                  const _ZoneDivider('PROMOTION ZONE ↑', AppColors.mastered),
-                if (i == players.length - _demote)
-                  const _ZoneDivider(
-                    'DEMOTION ZONE ↓',
-                    AppColors.misconception,
-                  ),
-                _Row(
-                  rank: i + 1,
-                  name: players[i].name,
-                  xp: players[i].xp,
-                  me: players[i].me,
-                  zoneColor: i < _promote
-                      ? AppColors.mastered
-                      : i >= players.length - _demote
-                      ? AppColors.misconception
-                      : null,
-                ),
               ],
-            ],
+            ),
           ),
         );
       },

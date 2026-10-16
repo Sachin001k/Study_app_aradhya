@@ -163,7 +163,9 @@ int xpForLevel(int level) => 50 * (level - 1) * level;
 
 /// All game state, kept in memory until the backend is connected.
 class GameState extends ChangeNotifier {
+  String? userId;
   String displayName = 'Player';
+  bool onboarded = true;
   String? goal;
   Set<String> subjects = {'Maths'};
   int dailyMinutes = 38;
@@ -186,6 +188,10 @@ class GameState extends ChangeNotifier {
   final Map<String, int> postponeCounts = {};
   int comfortSessions = 0;
   bool comfortNudgeShown = false;
+
+  /// Called after every answer, e.g. to log it to the backend.
+  void Function(Question question, int chosen, bool correct, Duration taken)?
+  onAttempt;
 
   ConceptProgress progressOf(String conceptId) =>
       progress.putIfAbsent(conceptId, ConceptProgress.new);
@@ -210,23 +216,26 @@ class GameState extends ChangeNotifier {
 
   // ---------------------------------------------------------------- session
 
-  void signIn(AppUser user) {
+  /// Resets state for [user]. [seedDemo] fills the knowledge map with sample
+  /// progress for the offline mock; real accounts load theirs from the backend.
+  void signIn(AppUser user, {bool seedDemo = true}) {
+    userId = user.id;
     displayName = user.displayName;
+    onboarded = !user.isNew;
     xp = user.xp;
     weeklyXp = (user.xp * 0.2).round();
     streak = user.streak;
     rating = user.rating;
+    lastActiveDay = null;
+    goal = null;
     progress.clear();
     badges.clear();
     postponeCounts.clear();
     comfortSessions = 0;
     comfortNudgeShown = false;
     missionBonusClaimed = false;
-    if (user.isNew) {
-      answered = correctAnswers = bestCombo = 0;
-    } else {
-      _seedDemoProgress();
-    }
+    answered = correctAnswers = bestCombo = 0;
+    if (seedDemo && !user.isNew) _seedDemoProgress();
     mission = buildMission();
     notifyListeners();
   }
@@ -239,7 +248,14 @@ class GameState extends ChangeNotifier {
     this.goal = goal;
     this.subjects = subjects;
     dailyMinutes = minutes;
+    onboarded = true;
     mission = buildMission();
+    notifyListeners();
+  }
+
+  /// Applies externally loaded state (e.g. from the backend) in one update.
+  void restore(void Function() apply) {
+    apply();
     notifyListeners();
   }
 
@@ -582,6 +598,7 @@ class GameState extends ChangeNotifier {
       }
     }
     p.lastReview = now;
+    onAttempt?.call(question, chosen, correct, taken);
 
     answered++;
     if (correct) correctAnswers++;

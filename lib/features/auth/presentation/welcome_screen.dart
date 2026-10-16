@@ -2,7 +2,8 @@ import 'package:flutter/material.dart';
 
 import '../../../core/theme/app_colors.dart';
 import '../../../core/widgets/game_button.dart';
-import '../../../core/widgets/graph_backdrop.dart';
+import '../../../core/widgets/app_logo.dart';
+import '../../../core/widgets/game_background.dart';
 import '../../../core/widgets/stat_chip.dart';
 import 'login_screen.dart';
 import 'signup_screen.dart';
@@ -15,20 +16,7 @@ class WelcomeScreen extends StatelessWidget {
     return Scaffold(
       body: Stack(
         children: [
-          const Positioned.fill(child: GraphBackdrop()),
-          // Fade the graph out towards the bottom so buttons stay legible.
-          const Positioned.fill(
-            child: DecoratedBox(
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  begin: Alignment.topCenter,
-                  end: Alignment.bottomCenter,
-                  colors: [Colors.transparent, AppColors.background],
-                  stops: [0.2, 0.7],
-                ),
-              ),
-            ),
-          ),
+          const Positioned.fill(child: GameBackground()),
           SafeArea(
             child: Center(
               child: ConstrainedBox(
@@ -38,6 +26,8 @@ class WelcomeScreen extends StatelessWidget {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
+                      const SizedBox(height: 16),
+                      const AppLogo(size: 44),
                       const Spacer(flex: 3),
                       const Wrap(
                         spacing: 8,

@@ -3,9 +3,8 @@ import 'package:flutter/material.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/widgets/game_button.dart';
 import '../../../core/widgets/game_text_field.dart';
-import '../../game/game_state.dart';
-import '../../shell/app_shell.dart';
 import '../data/auth_repository.dart';
+import 'after_auth.dart';
 import 'forgot_password_screen.dart';
 import 'signup_screen.dart';
 import 'validators.dart';
@@ -35,12 +34,9 @@ class _LoginScreenState extends State<LoginScreen> {
   Future<void> _run(Future<AppUser> Function() action) async {
     setState(() => _loading = true);
     try {
-      gameState.signIn(await action());
+      final user = await action();
       if (!mounted) return;
-      Navigator.of(context).pushAndRemoveUntil(
-        MaterialPageRoute(builder: (_) => const AppShell()),
-        (_) => false,
-      );
+      await continueAfterAuth(context, user);
     } catch (e) {
       if (mounted) showAuthError(context, e);
     } finally {

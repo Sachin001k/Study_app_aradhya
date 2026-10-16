@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/widgets/game_button.dart';
 import '../../game/game_state.dart';
-import '../../shell/app_shell.dart';
+import '../../entry/game_entry_screen.dart';
 import '../data/auth_repository.dart';
 
 /// Three quick questions after sign-up. Answers feed the mission planner
@@ -75,10 +75,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
       subjects: _subjects,
       minutes: _minutes!,
     );
-    Navigator.of(context).pushAndRemoveUntil(
-      MaterialPageRoute(builder: (_) => const AppShell()),
-      (_) => false,
-    );
+    enterGame(context);
   }
 
   void _back() {

@@ -2,15 +2,15 @@ import 'package:flutter/material.dart';
 
 import '../../core/theme/app_colors.dart';
 import '../../core/widgets/game_button.dart';
-import '../auth/data/auth_repository.dart';
 import '../auth/presentation/welcome_screen.dart';
 import '../game/game_state.dart';
+import '../game/session.dart';
 
 class ProfileScreen extends StatelessWidget {
   const ProfileScreen({super.key});
 
   Future<void> _signOut(BuildContext context) async {
-    await authRepository.signOut();
+    await endSession();
     if (!context.mounted) return;
     Navigator.of(context).pushAndRemoveUntil(
       MaterialPageRoute(builder: (_) => const WelcomeScreen()),

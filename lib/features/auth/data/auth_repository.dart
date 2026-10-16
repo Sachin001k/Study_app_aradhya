@@ -2,6 +2,9 @@
 /// mock below can be swapped for a `SupabaseAuthRepository` without touching
 /// any screen.
 abstract class AuthRepository {
+  /// The signed-in user from a previous session, if any.
+  AppUser? get currentUser;
+
   Future<AppUser> signInWithEmail(String email, String password);
   Future<AppUser> signUpWithEmail({
     required String name,
@@ -48,6 +51,9 @@ class AuthException implements Exception {
 /// In-memory implementation for building the UI before Supabase is wired up.
 class MockAuthRepository implements AuthRepository {
   static const _delay = Duration(milliseconds: 900);
+
+  @override
+  AppUser? get currentUser => null;
 
   @override
   Future<AppUser> signInWithEmail(String email, String password) async {
@@ -109,4 +115,5 @@ class MockAuthRepository implements AuthRepository {
 }
 
 /// Single shared instance until a DI solution (Riverpod) is added.
-final AuthRepository authRepository = MockAuthRepository();
+/// Replaced with `SupabaseAuthRepository` at startup when `.env` has keys.
+AuthRepository authRepository = MockAuthRepository();

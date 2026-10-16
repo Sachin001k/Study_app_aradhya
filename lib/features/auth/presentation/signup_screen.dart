@@ -3,10 +3,9 @@ import 'package:flutter/material.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/widgets/game_button.dart';
 import '../../../core/widgets/game_text_field.dart';
-import '../../game/game_state.dart';
 import '../data/auth_repository.dart';
 import 'login_screen.dart';
-import 'onboarding_screen.dart';
+import 'after_auth.dart';
 import 'validators.dart';
 import 'widgets/auth_scaffold.dart';
 import 'widgets/social_buttons.dart';
@@ -40,12 +39,8 @@ class _SignupScreenState extends State<SignupScreen> {
     setState(() => _loading = true);
     try {
       final user = await action();
-      gameState.signIn(user);
       if (!mounted) return;
-      Navigator.of(context).pushAndRemoveUntil(
-        MaterialPageRoute(builder: (_) => OnboardingScreen(user: user)),
-        (_) => false,
-      );
+      await continueAfterAuth(context, user);
     } catch (e) {
       if (mounted) showAuthError(context, e);
     } finally {

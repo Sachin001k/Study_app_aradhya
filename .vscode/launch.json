@@ -2,12 +2,21 @@
   "version": "0.2.0",
   "configurations": [
     {
-      "name": "Aradhya (localhost:8080)",
+      "name": "Aradhya (Chrome)",
+      "request": "launch",
+      "type": "dart",
+      "program": "lib/main.dart",
+      "deviceId": "chrome",
+      "args": ["--web-port", "8080", "--dart-define-from-file=.env"]
+    },
+    {
+      "name": "Aradhya (localhost:8080, release)",
       "request": "launch",
       "type": "dart",
       "program": "lib/main.dart",
       "deviceId": "web-server",
-      "args": ["--web-port", "8080", "--web-hostname", "localhost"]
+      "flutterMode": "release",
+      "args": ["--web-port", "8080", "--dart-define-from-file=.env"]
     }
   ]
 }
