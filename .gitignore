@@ -46,3 +46,6 @@ app.*.map.json
 
 # Local secrets
 .env
+
+# Signed Play Store bundles (large binaries, kept locally only)
+/releases/
