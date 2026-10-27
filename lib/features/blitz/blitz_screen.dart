@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../core/layout.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/widgets/game_button.dart';
 import '../game/content.dart';
@@ -89,12 +90,17 @@ class _BlitzScreenState extends State<BlitzScreen>
     });
   }
 
+  /// Guards against a double tap finishing (and saving) the session twice.
+  bool _finished = false;
+
   void _next() {
+    if (_finished) return;
     if (_index + 1 < widget.questions.length) {
       setState(() => _index++);
       _startQuestion();
       return;
     }
+    _finished = true;
     gameState.finishSession(_session, task: widget.task);
     Navigator.of(context).pushReplacement(
       MaterialPageRoute(builder: (_) => ResultsScreen(session: _session)),
@@ -108,7 +114,10 @@ class _BlitzScreenState extends State<BlitzScreen>
       body: SafeArea(
         child: Center(
           child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 520),
+            constraints: const BoxConstraints(
+              maxWidth: 520,
+              maxHeight: kPlayMaxHeight,
+            ),
             child: Padding(
               padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
               child: Column(

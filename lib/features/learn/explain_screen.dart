@@ -57,7 +57,12 @@ class _ExplainScreenState extends State<ExplainScreen>
     setState(() => _recording = true);
   }
 
+  /// Guards against a double tap finishing (and saving) the session twice.
+  bool _finished = false;
+
   void _finish() {
+    if (_finished) return;
+    _finished = true;
     final session = gameState.startSession(
       'Explain: ${widget.concept.name}',
       widget.concept.keyPoints.length,

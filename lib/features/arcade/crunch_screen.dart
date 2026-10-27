@@ -1,6 +1,8 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+
+import '../../core/layout.dart';
 import 'package:flutter/services.dart';
 
 import '../../core/theme/app_colors.dart';
@@ -153,7 +155,10 @@ class _CrunchScreenState extends State<CrunchScreen> {
             SafeArea(
               child: Center(
                 child: ConstrainedBox(
-                  constraints: const BoxConstraints(maxWidth: 460),
+                  constraints: const BoxConstraints(
+                    maxWidth: 460,
+                    maxHeight: kPlayMaxHeight,
+                  ),
                   child: Padding(
                     padding: const EdgeInsets.fromLTRB(12, 8, 12, 16),
                     child: Column(

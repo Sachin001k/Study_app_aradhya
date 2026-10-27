@@ -190,7 +190,11 @@ class ProgressCodec {
       ..sort((a, b) => (a['position'] as int).compareTo(b['position'] as int));
     return [
       for (final r in sorted)
-        if (TaskType.values.any((t) => t.name == r['type']))
+        // Skip rows that would crash launchTask: unknown type, or no/removed
+        // concept ids (content.dart may change between releases).
+        if (TaskType.values.any((t) => t.name == r['type']) &&
+            (r['concept_ids'] as List? ?? const []).isNotEmpty &&
+            (r['concept_ids'] as List).every(conceptById.containsKey))
           MissionTask(
             type: TaskType.values.byName(r['type'] as String),
             title: r['title'] as String,

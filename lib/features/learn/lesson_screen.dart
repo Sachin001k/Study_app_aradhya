@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
+import '../../core/layout.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/widgets/game_button.dart';
 import '../blitz/blitz_screen.dart';
@@ -102,7 +103,10 @@ class _LessonScreenState extends State<LessonScreen> {
       body: SafeArea(
         child: Center(
           child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 520),
+            constraints: const BoxConstraints(
+              maxWidth: 520,
+              maxHeight: kPlayMaxHeight,
+            ),
             child: Padding(
               padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
               child: Column(
@@ -190,37 +194,43 @@ class _Card extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 4),
-      child: Container(
-        padding: const EdgeInsets.all(24),
-        decoration: BoxDecoration(
-          color: AppColors.surface,
-          borderRadius: BorderRadius.circular(24),
-          border: Border.all(color: color.withValues(alpha: 0.6), width: 2),
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              label,
-              style: TextStyle(
-                color: color,
-                fontWeight: FontWeight.w800,
-                letterSpacing: 1.2,
+    // Sized to its text and centred in the page, so a short key idea doesn't
+    // sit inside a screen-tall empty box. Long text scrolls instead.
+    return Center(
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.symmetric(horizontal: 4),
+        child: Container(
+          width: double.infinity,
+          constraints: const BoxConstraints(minHeight: 220),
+          padding: const EdgeInsets.all(24),
+          decoration: BoxDecoration(
+            color: AppColors.surface,
+            borderRadius: BorderRadius.circular(24),
+            border: Border.all(color: color.withValues(alpha: 0.6), width: 2),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                label,
+                style: TextStyle(
+                  color: color,
+                  fontWeight: FontWeight.w800,
+                  letterSpacing: 1.2,
+                ),
               ),
-            ),
-            const Spacer(),
-            Text(
-              text,
-              style: TextStyle(
-                fontSize: mono ? 22 : 24,
-                fontWeight: FontWeight.w700,
-                height: 1.35,
+              const SizedBox(height: 28),
+              Text(
+                text,
+                style: TextStyle(
+                  fontSize: mono ? 22 : 24,
+                  fontWeight: FontWeight.w700,
+                  height: 1.35,
+                ),
               ),
-            ),
-            const Spacer(flex: 2),
-          ],
+              const SizedBox(height: 12),
+            ],
+          ),
         ),
       ),
     );

@@ -23,20 +23,37 @@ Future<void> main() async {
     progressStore = SupabaseProgressStore(Supabase.instance.client);
   }
   final user = authRepository.currentUser;
-  if (user != null) await beginSession(user);
-  runApp(EkagnaApp(user: user));
+  final warning = user == null ? null : await beginSession(user);
+  runApp(EkagnaApp(user: user, startupWarning: warning));
 }
 
 class EkagnaApp extends StatelessWidget {
-  const EkagnaApp({super.key, this.user});
+  const EkagnaApp({super.key, this.user, this.startupWarning});
 
   /// Restored from a previous session, if any.
   final AppUser? user;
 
+  /// Shown once after launch when saved progress couldn't be loaded.
+  final String? startupWarning;
+
+  static final _messenger = GlobalKey<ScaffoldMessengerState>();
+
   @override
   Widget build(BuildContext context) {
+    final warning = startupWarning;
+    if (warning != null) {
+      WidgetsBinding.instance.addPostFrameCallback(
+        (_) => _messenger.currentState?.showSnackBar(
+          SnackBar(
+            content: Text(warning),
+            duration: const Duration(seconds: 6),
+          ),
+        ),
+      );
+    }
     return MaterialApp(
       title: 'Ekagna',
+      scaffoldMessengerKey: _messenger,
       debugShowCheckedModeBanner: false,
       theme: AppTheme.dark(),
       home: switch (user) {

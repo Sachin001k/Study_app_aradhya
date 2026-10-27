@@ -291,6 +291,9 @@ class GameState extends ChangeNotifier {
   void _rollDay() {
     final t = _today();
     if (t == activityDay) return;
+    // Weekly XP (league) resets on Monday even if the app stayed open.
+    DateTime monday(DateTime d) => d.subtract(Duration(days: d.weekday - 1));
+    if (monday(t) != monday(activityDay)) weeklyXp = 0;
     activityDay = t;
     todayXp = todayQuestions = todayCorrect = todaySessions = todaySeconds = 0;
   }
@@ -864,8 +867,15 @@ class GameState extends ChangeNotifier {
     _rollDay();
     final now = DateTime.now();
     final today = DateTime(now.year, now.month, now.day);
-    if (lastActiveDay != today) {
-      streak++;
+    final last = lastActiveDay;
+    if (last != today) {
+      // Only consecutive days extend the streak; a gap starts a new one.
+      // (Rounded hours, not inDays, so a DST change can't skew it.)
+      final gap = last == null
+          ? null
+          : (today.difference(last).inHours / 24).round();
+      // No last day (new player / offline demo) just continues the count.
+      streak = gap == null || gap == 1 ? streak + 1 : 1;
       lastActiveDay = today;
     }
     longestStreak = math.max(longestStreak, streak);

@@ -2,6 +2,8 @@ import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+
+import '../../core/layout.dart';
 import 'package:flutter/services.dart';
 
 import '../../core/theme/app_colors.dart';
@@ -114,7 +116,10 @@ class _MemoryScreenState extends State<MemoryScreen> {
           SafeArea(
             child: Center(
               child: ConstrainedBox(
-                constraints: const BoxConstraints(maxWidth: 560),
+                constraints: const BoxConstraints(
+                  maxWidth: 560,
+                  maxHeight: kPlayMaxHeight,
+                ),
                 child: Padding(
                   padding: const EdgeInsets.fromLTRB(12, 8, 12, 16),
                   child: Column(
@@ -145,26 +150,35 @@ class _MemoryScreenState extends State<MemoryScreen> {
                         child: LayoutBuilder(
                           builder: (context, c) {
                             const cols = 3, rows = 4, gap = 10.0;
-                            final w = (c.maxWidth - gap * (cols - 1)) / cols;
-                            final h = (c.maxHeight - gap * (rows - 1)) / rows;
-                            return Wrap(
-                              spacing: gap,
-                              runSpacing: gap,
-                              children: [
-                                for (var i = 0; i < _cards.length; i++)
-                                  SizedBox(
-                                    width: w,
-                                    height: math.min(h, w * 1.2),
-                                    child: _FlipCard(
-                                      card: _cards[i],
-                                      faceUp:
-                                          _up.contains(i) ||
-                                          _matched.contains(i),
-                                      matched: _matched.contains(i),
-                                      onTap: () => _flip(i),
-                                    ),
-                                  ),
-                              ],
+                            // Largest 5:6 card that fits both directions, so
+                            // the grid never stretches or overflows.
+                            final fitW = (c.maxWidth - gap * (cols - 1)) / cols;
+                            final fitH =
+                                (c.maxHeight - gap * (rows - 1)) / rows / 1.2;
+                            final w = math.min(math.min(fitW, fitH), 150.0);
+                            return Center(
+                              child: SizedBox(
+                                width: w * cols + gap * (cols - 1),
+                                child: Wrap(
+                                  spacing: gap,
+                                  runSpacing: gap,
+                                  children: [
+                                    for (var i = 0; i < _cards.length; i++)
+                                      SizedBox(
+                                        width: w,
+                                        height: w * 1.2,
+                                        child: _FlipCard(
+                                          card: _cards[i],
+                                          faceUp:
+                                              _up.contains(i) ||
+                                              _matched.contains(i),
+                                          matched: _matched.contains(i),
+                                          onTap: () => _flip(i),
+                                        ),
+                                      ),
+                                  ],
+                                ),
+                              ),
                             );
                           },
                         ),

@@ -123,7 +123,15 @@ class SupabaseProgressStore implements GameEventSink {
 
   /// Saves anything pending and stops syncing.
   Future<void> detach() async {
+    // flush() returns early while a save is in flight, so wait for that save
+    // (bounded) before the final one; otherwise the last answers are lost.
+    _debounce?.cancel();
+    for (var i = 0; _saving && i < 200; i++) {
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+    }
     await flush();
+    // Failed rows belong to this user; retrying them as the next one fails RLS.
+    _pending.clear();
     _game?.removeListener(_scheduleSave);
     _game?.events = null;
     _game = null;

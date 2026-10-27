@@ -1,6 +1,8 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+
+import '../../core/layout.dart';
 import 'package:flutter/services.dart';
 
 import '../../core/theme/app_colors.dart';
@@ -99,7 +101,10 @@ class _RushScreenState extends State<RushScreen> {
           SafeArea(
             child: Center(
               child: ConstrainedBox(
-                constraints: const BoxConstraints(maxWidth: 560),
+                constraints: const BoxConstraints(
+                  maxWidth: 560,
+                  maxHeight: kPlayMaxHeight,
+                ),
                 child: Padding(
                   padding: const EdgeInsets.fromLTRB(12, 8, 12, 16),
                   child: Column(

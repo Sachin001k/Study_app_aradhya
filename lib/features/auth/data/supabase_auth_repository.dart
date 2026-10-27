@@ -66,8 +66,14 @@ class SupabaseAuthRepository implements AuthRepository {
   /// On web this redirects away and the app reloads signed in; on mobile it
   /// returns once the auth callback fires.
   Future<AppUser> _oauth(sb.OAuthProvider provider) => _guard(() async {
+    // onAuthStateChange replays past events to new listeners, so an earlier
+    // sign-in (e.g. email, then sign out) would match instantly. Only accept
+    // the event for the session that is current when it arrives.
     final signedIn = _auth.onAuthStateChange.firstWhere(
-      (s) => s.event == sb.AuthChangeEvent.signedIn,
+      (s) =>
+          s.event == sb.AuthChangeEvent.signedIn &&
+          s.session != null &&
+          s.session!.accessToken == _auth.currentSession?.accessToken,
     );
     await _auth.signInWithOAuth(
       provider,

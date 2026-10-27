@@ -15,7 +15,8 @@ Future<String?> beginSession(AppUser user) async {
   gameState.signIn(user, seedDemo: store == null);
   if (store == null) return null;
   try {
-    await store.attach(gameState, user);
+    // Bounded so a slow network can't leave the app on a blank screen.
+    await store.attach(gameState, user).timeout(const Duration(seconds: 15));
     return null;
   } catch (e) {
     debugPrint('Progress load failed: $e');
@@ -26,5 +27,10 @@ Future<String?> beginSession(AppUser user) async {
 
 Future<void> endSession() async {
   await progressStore?.detach();
-  await authRepository.signOut();
+  try {
+    await authRepository.signOut();
+  } catch (e) {
+    // Offline: the local session is already cleared, which is what matters.
+    debugPrint('Sign-out request failed: $e');
+  }
 }
